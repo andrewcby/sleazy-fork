@@ -672,7 +672,53 @@ function clearMessagesButton() {
   document.querySelector('.headline').append(btn);
 }
 
-//====================================================================================================
+// ────────────────────────────────────────────────────────────────
+// SORT STATE & HELPERS
+let currentSort = null;   // 'views' | 'duration' | null
+let hdFirst     = false;  // whether “HD first” is on
+
+function extractViewsFromCard(card) {
+  const viewEl = card.querySelector('.view');
+  if (!viewEl) return 0;
+  return parseInt(viewEl.textContent.trim().replace(/,/g, ''), 10) || 0;
+}
+
+function extractDurationFromCard(card) {
+  const m = card.textContent.match(/(\d+):(\d{2})/);
+  return m ? (parseInt(m[1],10)*60 + parseInt(m[2],10)) : 0;
+}
+
+function isHD(card) {
+  return !!card.querySelector('.quality');
+}
+
+/**
+ * Re-orders all thumbnails in RULES.CONTAINER:
+ *   1) HD-first (if hdFirst===true)
+ *   2) then by currentSort ('views' or 'duration')
+ */
+function applySortAndFilter() {
+  const container = RULES.CONTAINER;
+  const cards = Array.from(container.querySelectorAll('.tumbpu, .thumb-holder'));
+  const sorted = cards.slice().sort((a, b) => {
+    // 1) HD-first?
+    if (hdFirst) {
+      const ah = isHD(a)?1:0, bh = isHD(b)?1:0;
+      if (ah !== bh) return bh - ah;
+    }
+    // 2) then views or duration?
+    if (currentSort === 'views') {
+      return extractViewsFromCard(b) - extractViewsFromCard(a);
+    }
+    if (currentSort === 'duration') {
+      return extractDurationFromCard(b) - extractDurationFromCard(a);
+    }
+    // 3) else keep original order
+    return 0;
+  });
+  sorted.forEach(card => container.appendChild(card));
+}
+// ────────────────────────────────────────────────────────────────
 
 function route() {
   console.log(SponsaaLogo);
@@ -721,8 +767,53 @@ function route() {
     handleLoadedHTML(c, RULES.IS_MEMBER_PAGE ? c : RULES.CONTAINER, true);
   });
 
+  // ─── Re-build the scheme so our 3 buttons live in one row ───
+  const base = defaultSchemeWithPrivateFilter;
+
+  const customScheme = {
+    excludeFilter:   base.excludeFilter,
+    includeFilter:   base.includeFilter,
+    privateFilter:   base.privateFilter,
+    infiniteScroll:  base.infiniteScroll,
+
+    // ─── our single row with 3 buttons ───
+    sortButtonsRow: [
+      {
+        type:      'button',
+        innerText: 'sort by views',
+        callback:  () => {
+          currentSort = 'views';
+          hdFirst     = false;
+          applySortAndFilter();
+        },
+      },
+      {
+        type:      'button',
+        innerText: 'sort by duration',
+        callback:  () => {
+          currentSort = 'duration';
+          hdFirst     = false;
+          applySortAndFilter();
+        },
+      },
+      {
+        type:      'button',
+        innerText: 'HD first',
+        callback:  () => {
+          hdFirst     = true;
+          currentSort = null;
+          applySortAndFilter();
+        },
+      },
+    ],
+
+    durationFilter:  base.durationFilter,
+  };
+  // ────────────────────────────────────────────────────────────────
+
+  // initialize preview + UI with our new control ordering
   new PreviewAnimation(document.body);
-  new JabroniOutfitUI(store, defaultSchemeWithPrivateFilter);
+  new JabroniOutfitUI(store, customScheme);
 
   if (RULES.IS_OTHER_MEMBER_PAGE) {
     initFriendship();
